@@ -17,12 +17,17 @@ export interface Player {
   chargeAmount: number;
   chargeDir: number;
   isCharging: boolean;
+  qteStartTime: number;
+  qteSweetSpotRange: [number, number]; // [min, max]
+  
   isSuperDashing: boolean;
   superDashTimer: number;
   isAutoLanding: boolean;
   autoLandTarget: Vector2 | null;
   autoLandStartPos: Vector2 | null;
   autoLandTimer: number;
+  
+  currentSpeed: number;
 }
 
 export interface Platform {
@@ -47,4 +52,9 @@ export interface InputState {
   startY: number;
   currentX: number;
   downTime: number;
+}
+
+export interface LeaderboardEntry {
+  distance: number;
+  date: string;
 }
