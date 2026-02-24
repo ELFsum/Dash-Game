@@ -147,25 +147,27 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, setGameState,
     );
 
     let inChargeZone = false;
-    if (player.isGrounded) {
-      const px = player.pos.x + player.width / 2;
-      for (const p of platformsRef.current) {
-        if (p.hasChargeZone && p.chargeZoneOffset !== undefined && p.chargeZoneWidth !== undefined) {
-          const zx = p.x + p.chargeZoneOffset;
-          const zw = p.chargeZoneWidth;
-          if (px >= zx && px <= zx + zw && Math.abs(player.pos.y + player.height - p.y) < 12) {
-            inChargeZone = true;
-            break;
-          }
+    const px = player.pos.x + player.width / 2;
+    for (const p of platformsRef.current) {
+      if (p.hasChargeZone && p.chargeZoneOffset !== undefined && p.chargeZoneWidth !== undefined) {
+        const zx = p.x + p.chargeZoneOffset;
+        const zw = p.chargeZoneWidth;
+        
+        const hMatch = px >= zx && px <= zx + zw;
+        const vMatch = player.isCharging || (player.pos.y + player.height <= p.y + 30 && player.pos.y + player.height >= p.y - 160);
+        
+        if (hMatch && vMatch) {
+          inChargeZone = true;
+          break;
         }
       }
     }
 
     let isHolding = false;
     if (input.isDown) {
-      const holdDuration = now - input.downTime;
       const dx = input.currentX - input.startX;
-      if (holdDuration > GAME_CONSTANTS.HOLD_DELAY && Math.abs(dx) < GAME_CONSTANTS.SWIPE_MIN_DIST) {
+      if (Math.abs(dx) < GAME_CONSTANTS.SWIPE_MIN_DIST) {
+        // Start holding immediately if in charge zone to prevent the "hop"
         if (inChargeZone && !player.isSuperDashing && !player.isAutoLanding) {
           isHolding = true;
         }
@@ -242,7 +244,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, setGameState,
       }
 
       player.pos.x += player.vel.x * dt;
-      if (!player.isDashing) player.vel.y += GAME_CONSTANTS.GRAVITY * dt;
+      if (!player.isDashing) {
+        let gravityScale = 1.0;
+        // Apply reduced gravity if moving upwards and holding the jump button
+        if (player.vel.y < 0 && input.isDown && !player.isCharging) {
+          gravityScale = GAME_CONSTANTS.JUMP_HOLD_GRAVITY_SCALE;
+        }
+        player.vel.y += GAME_CONSTANTS.GRAVITY * dt * gravityScale;
+      }
       player.pos.y += player.vel.y * dt;
     }
 
@@ -385,6 +394,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, setGameState,
     if (gameState !== GameState.PLAYING) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     inputRef.current = { isDown: true, startX: e.clientX, startY: e.clientY, currentX: e.clientX, downTime: performance.now() };
+
+    // Jump immediately on press if grounded AND NOT in a charge zone
+    const player = playerRef.current;
+    
+    // Check if in charge zone right now
+    let inZone = false;
+    const px = player.pos.x + player.width / 2;
+    for (const p of platformsRef.current) {
+      if (p.hasChargeZone && p.chargeZoneOffset !== undefined && p.chargeZoneWidth !== undefined) {
+        const zx = p.x + p.chargeZoneOffset;
+        const zw = p.chargeZoneWidth;
+        if (px >= zx && px <= zx + zw && Math.abs(player.pos.y + player.height - p.y) < 15) {
+          inZone = true;
+          break;
+        }
+      }
+    }
+
+    if (player.isGrounded && !player.isSuperDashing && !player.isAutoLanding && !inZone) {
+      player.vel.y = GAME_CONSTANTS.JUMP_FORCE;
+      player.isGrounded = false;
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -413,9 +444,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ gameState, setGameState,
         playerRef.current.isDashing = true; playerRef.current.dashTimer = GAME_CONSTANTS.DASH_DURATION;
       }
     } else if (duration < GAME_CONSTANTS.TAP_MAX_TIME) {
-      if (playerRef.current.isGrounded && !playerRef.current.isSuperDashing && !playerRef.current.isAutoLanding) {
-        playerRef.current.vel.y = GAME_CONSTANTS.JUMP_FORCE;
-        playerRef.current.isGrounded = false;
+      // Swipe and Super Dash are handled above. 
+      // Tap jump is now handled in handlePointerDown for better responsiveness,
+      // UNLESS we were in a charge zone, in which case we might want to jump on tap release.
+      
+      const player = playerRef.current;
+      if (player.isGrounded && !player.isSuperDashing && !player.isAutoLanding) {
+        // If it was a very quick tap in the zone, jump instead of charging
+        player.vel.y = GAME_CONSTANTS.JUMP_FORCE;
+        player.isGrounded = false;
+        player.isCharging = false;
+      } else if (player.vel.y < GAME_CONSTANTS.JUMP_RELEASE_VELOCITY_CAP) {
+        player.vel.y = GAME_CONSTANTS.JUMP_RELEASE_VELOCITY_CAP;
       }
     }
   };

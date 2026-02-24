@@ -22,6 +22,10 @@ export const GAME_CONSTANTS = {
   TAP_MAX_TIME: 200,      
   HOLD_DELAY: 100,        
   SWIPE_MIN_DIST: 60,     
+  
+  // Jump Tuning
+  JUMP_HOLD_GRAVITY_SCALE: 0.4,
+  JUMP_RELEASE_VELOCITY_CAP: -350,
 
   // Dimensions
   START_PLATFORM_WIDTH: 450,
